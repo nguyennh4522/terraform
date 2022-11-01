@@ -82,6 +82,10 @@ resource "aws_security_group" "validator_sg" {
   }
 }
 
+variable "VALIDATOR_WALLET_PRIVATE_KEY" {
+  type = string
+}
+
 resource "aws_instance" "validator" {
   instance_type          = "t2.small"
   ami                    = "ami-0fbb51b4aa5671449"
@@ -101,7 +105,7 @@ resource "aws_instance" "validator" {
   sleep 10
 
   sleep 1
-  sudo docker run --env VALIDATOR_WALLET_PRIVATE_KEY=${VALIDATOR_WALLET_PRIVATE_KEY} --name validator -p 80:8080 -d public.ecr.aws/s2v2v1t7/icrosschain/validator:latest
+  sudo docker run --env VALIDATOR_WALLET_PRIVATE_KEY=${var.VALIDATOR_WALLET_PRIVATE_KEY} --name validator -p 80:8080 -d public.ecr.aws/s2v2v1t7/icrosschain/validator:latest
   EOL
 
   root_block_device {
@@ -110,4 +114,9 @@ resource "aws_instance" "validator" {
   tags = {
     Name = "validator"
   }
+}
+
+resource "aws_eip" "validator_eip" {
+  instance = aws_instance.validator.id
+  vpc      = true
 }
