@@ -1,10 +1,27 @@
 provider "aws" {
-  region = "ap-southeast-1"
+  region = var.AWS_REGION
 }
+
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"]
+}
+
 
 resource "aws_instance" "validator" {
   instance_type          = "t2.small"
-  ami                    = "ami-0fbb51b4aa5671449"
+  ami                    = data.aws_ami.ubuntu.id
   vpc_security_group_ids = [aws_security_group.validator_sg.id]
   subnet_id              = aws_subnet.validator_public_subnet.id
   user_data              = <<-EOL
@@ -20,18 +37,34 @@ resource "aws_instance" "validator" {
   sudo docker pull public.ecr.aws/s2v2v1t7/icrosschain/validator:latest
   sleep 10
 
-  sudo docker run --env VALIDATOR_WALLET_PRIVATE_KEY=${var.VALIDATOR_WALLET_PRIVATE_KEY} --name validator -p 80:8080 -d public.ecr.aws/s2v2v1t7/icrosschain/validator:latest
+  validatorAddr=${var.VALIDATOR_ADDR}
+  if [[ -z $validatorAddr ]]
+  then
+    validatorAddr=${random_string.dns.result}
+  fi
+
+  sudo docker run -d \
+    --env VALIDATOR_WALLET_PRIVATE_KEY=${var.VALIDATOR_WALLET_PRIVATE_KEY} \
+    --env VALIDATOR_ADDR=$validatorAddr \
+    --name validator \
+    -p 80:8080 \
+    public.ecr.aws/s2v2v1t7/icrosschain/validator:latest
   EOL
 
   root_block_device {
     volume_size = 20
   }
   tags = {
-    Name = "validator"
+    Name = "${var.VALIDATOR_ADDR}"
   }
 }
 
 resource "aws_eip" "validator_eip" {
   instance = aws_instance.validator.id
   vpc      = true
+}
+
+output "validator_eip_public_dns" {
+  value       = aws_eip.validator_eip.public_dns
+  description = "The public DNS of validator instance."
 }
